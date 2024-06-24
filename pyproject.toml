@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "discovery30303"
-version = "0.3.0"
+version = "0.3.1"
 description = "Discover devices that respond on port 30303"
 authors = ["J. Nick Koston <nick@koston.org>"]
 readme = "README.md"
