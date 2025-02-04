@@ -7,7 +7,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 _LOGGER = logging.getLogger(__name__)
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 
 
 MAX_UPDATES_WITHOUT_RESPONSE = 4

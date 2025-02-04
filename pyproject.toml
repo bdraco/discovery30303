@@ -1,6 +1,6 @@
 [project]
 name = "discovery30303"
-version = "0.3.2"
+version = "0.3.3"
 license = "Apache-2.0"
 description = "Discover devices that respond on port 30303"
 authors = [{ name = "J. Nick Koston", email = "nick@koston.org" }]

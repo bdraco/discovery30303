@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v0.3.3 (2025-02-04)
+
+### Fix
+
+* Update poetry to v2 + add license to metadata ([#35](https://github.com/bdraco/discovery30303/issues/35)) ([`4ad2aa8`](https://github.com/bdraco/discovery30303/commit/4ad2aa8704c31d859605bfc92f367e67fdaee339))
+
 ## v0.3.2 (2024-06-24)
 
 ### Fix
