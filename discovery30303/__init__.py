@@ -2,8 +2,16 @@ import asyncio
 import logging
 import socket
 import time
-from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple
+
+from .base_device import BaseDevice30303, Device30303, normalize_mac
+from .devices import (
+    DEVICE_HANDLERS,
+    MODEL_550,
+    MODEL_550_PREFIX,
+    Steamist450Device,
+    Steamist550Device,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -11,16 +19,6 @@ __version__ = "0.3.3"
 
 
 MAX_UPDATES_WITHOUT_RESPONSE = 4
-
-
-@dataclass
-class Device30303:
-    """A device discovered via port 30303."""
-
-    hostname: str
-    mac: str
-    ipaddress: str
-    name: str
 
 
 def create_udp_socket(discovery_port: int) -> socket.socket:
@@ -35,10 +33,6 @@ def create_udp_socket(discovery_port: int) -> socket.socket:
         sock.bind(("", 0))
     sock.setblocking(False)
     return sock
-
-
-def normalize_mac(mac: str) -> str:
-    return ":".join([i.zfill(2) for i in mac.replace("-", ":").split(":")])
 
 
 class Discovery30303(asyncio.DatagramProtocol):
@@ -69,7 +63,8 @@ class AIODiscovery30303:
     DISCOVERY_PORT = 30303
     BROADCAST_FREQUENCY = 3
     RESPONSE_SIZE = 64
-    DISCOVER_MESSAGE = b"Discovery: Who is out there?"
+    DISCOVER_MESSAGE = Steamist450Device.DISCOVER_MESSAGE
+    DISCOVER_MESSAGES = tuple(handler.DISCOVER_MESSAGE for handler in DEVICE_HANDLERS)
     BROADCAST_ADDRESS = "<broadcast>"
 
     def __init__(self) -> None:
@@ -85,24 +80,31 @@ class AIODiscovery30303:
         data: Optional[bytes],
         from_address: Tuple[str, int],
         address: Optional[str],
-        response_list: Dict[str, Device30303],
+        response_list: Dict[Tuple[str, int], Device30303],
     ) -> bool:
         """Process a response.
 
         Returns True if processing should stop
         """
-        if data is None or data == self.DISCOVER_MESSAGE:
-            return
-        data_split = data.decode("utf-8").split("\r\n")
-        if len(data_split) < 3 or from_address[0] in response_list:
-            return
-        response_list[from_address] = Device30303(
-            hostname=data_split[0].rstrip(),
-            ipaddress=from_address[0],
-            mac=normalize_mac(data_split[1].rstrip()),
-            name=data_split[2].split("\x00")[0].rstrip(),
-        )
-        return from_address[0] == address
+        if data is None or data in self.DISCOVER_MESSAGES:
+            return False
+        if from_address in response_list:
+            return False
+        for handler in DEVICE_HANDLERS:
+            if device := handler.parse_response(data, from_address):
+                response_list[from_address] = device
+                return from_address[0] == address
+        return False
+
+    def _send_discovery_messages(
+        self,
+        transport: asyncio.DatagramTransport,
+        destination: Tuple[str, int],
+    ) -> None:
+        """Send all discovery messages to destination."""
+        for message in self.DISCOVER_MESSAGES:
+            _LOGGER.debug("discover: %s => %s", destination, message)
+            transport.sendto(message, destination)
 
     async def _async_run_scan(
         self,
@@ -112,8 +114,7 @@ class AIODiscovery30303:
         found_all_future: "asyncio.Future[bool]",
     ) -> None:
         """Send the scans."""
-        _LOGGER.debug("discover: %s => %s", destination, self.DISCOVER_MESSAGE)
-        transport.sendto(self.DISCOVER_MESSAGE, destination)
+        self._send_discovery_messages(transport, destination)
         quit_time = time.monotonic() + timeout
         remain_time = timeout
         while True:
@@ -127,9 +128,8 @@ class AIODiscovery30303:
             except asyncio.TimeoutError:
                 if time.monotonic() >= quit_time:
                     return
-                # No response, send broadcast again in cast it got lost
-                _LOGGER.debug("discover: %s => %s", destination, self.DISCOVER_MESSAGE)
-                transport.sendto(self.DISCOVER_MESSAGE, destination)
+                # No response, send broadcast again in case it got lost
+                self._send_discovery_messages(transport, destination)
             else:
                 return  # found_all
             remain_time = quit_time - time.monotonic()
@@ -140,13 +140,14 @@ class AIODiscovery30303:
         """Discover on port 30303."""
         sock = create_udp_socket(self.DISCOVERY_PORT)
         destination = self._destination_from_address(address)
-        found_all_future = asyncio.Future()
-        response_list = {}
+        found_all_future: asyncio.Future[bool] = asyncio.Future()
+        response_list: Dict[Tuple[str, int], Device30303] = {}
 
         def _on_response(data: bytes, addr: Tuple[str, int]) -> None:
             _LOGGER.debug("discover: %s <= %s", addr, data)
             if self._process_response(data, addr, address, response_list):
-                found_all_future.set_result(True)
+                if not found_all_future.done():
+                    found_all_future.set_result(True)
 
         transport, _ = await asyncio.get_running_loop().create_datagram_endpoint(
             lambda: Discovery30303(
@@ -164,3 +165,18 @@ class AIODiscovery30303:
 
         self.found_devices = list(response_list.values())
         return self.found_devices
+
+
+__all__ = [
+    "AIODiscovery30303",
+    "BaseDevice30303",
+    "DEVICE_HANDLERS",
+    "Device30303",
+    "Discovery30303",
+    "MODEL_550",
+    "MODEL_550_PREFIX",
+    "Steamist450Device",
+    "Steamist550Device",
+    "create_udp_socket",
+    "normalize_mac",
+]
