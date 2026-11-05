@@ -56,6 +56,44 @@ async def test_async_scanner_specific_address(mock_discovery_aio_protocol):
             ipaddress="192.168.213.252",
             mac="00:1E:C0:38:63:40",
             name="Master Bath",
+            model="MY450",
+            raw_data=b"MY450-6340     \r\n00-1E-C0-38-63-40\r\nMaster Bath\x00   \x00",
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_async_scanner_specific_address_550(mock_discovery_aio_protocol):
+    """Test scanner with a specific address for a TSC-550."""
+    scanner = AIODiscovery30303()
+
+    task = asyncio.ensure_future(
+        scanner.async_scan(timeout=10, address="192.168.17.209")
+    )
+    _, protocol = await mock_discovery_aio_protocol()
+    raw_packet = (
+        b"STM 550 77F0 00000-D0-CA-01-F3-12Master Bath\x00\x00\x00\x00\x00\x00\x00"
+    )
+    protocol.datagram_received(
+        raw_packet,
+        ("192.168.17.209", 30303),
+    )
+    await task
+    assert scanner.found_devices == [
+        Device30303(
+            hostname="MY550-F312",
+            ipaddress="192.168.17.209",
+            mac="00:D0:CA:01:F3:12",
+            name="Master Bath",
+            model="MY550",
+            additional_data={
+                "temperature": 77,
+                "temp_units": "F",
+                "profile": 0,
+                "minutes_remain": 0,
+                "seconds_remain": 0,
+            },
+            raw_data=raw_packet,
         )
     ]
 
@@ -78,6 +116,8 @@ async def test_async_scanner_broadcast(mock_discovery_aio_protocol):
             ipaddress="192.168.213.252",
             mac="00:1E:C0:38:63:40",
             name="Master Bath",
+            model="MY450",
+            raw_data=b"MY450-6340     \r\n00-1E-C0-38-63-40\r\nMaster Bath\x00   \x00",
         )
     ]
 
